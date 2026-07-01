@@ -394,6 +394,15 @@ double icm_Abst::cal_log_obs(double s1, double s2, double eta){
     return(log(l - r) );
 }
 
+double icm_Abst::cal_log_obs_mix(double s1, double s2, double eta, double pi){
+    double l = baseS2CondS(s1, eta);
+    double r = baseS2CondS(s2, eta);
+    double likelihood_interval = l - r;
+    if(pi <= 0.0) return log(likelihood_interval);
+    double likelihood_left = 1.0 - r;
+    return log(pi * likelihood_left + (1.0 - pi) * likelihood_interval);
+}
+
 
 
 void icm_Abst::numeric_dobs_dp(bool forGA){    
@@ -407,7 +416,13 @@ void icm_Abst::numeric_dobs_dp(bool forGA){
    	h *= h_mult;
 
 	if(forGA){
-	    double sl, sr, llk_h,llk_l, this_eta, this_h;    
+	    double sl, sr, llk_h,llk_l, this_eta, this_h;
+	    auto log_obs_i = [&](double s1, double s2, double eta, int obs_i){
+	        if(hasLcMix && lcProb[obs_i] > 0.0){
+	            return cal_log_obs_mix(s1, s2, eta, lcProb[obs_i]);
+	        }
+	        return cal_log_obs(s1, s2, eta);
+	    };
    	 
    		for(int i = 0; i < n; i++){
     	    sl = baseS[ obs_inf[i].l];
@@ -421,35 +436,35 @@ void icm_Abst::numeric_dobs_dp(bool forGA){
     	        dob_dp_rightOnly[i] = 0;
     	        this_h = min(sl/2.0, h);
     	        sl -= this_h;
-    	        llk_h = cal_log_obs(sl, sr, this_eta);
+    	        llk_h = log_obs_i(sl, sr, this_eta, i);
     	        sl += this_h * 2.0;
-    	        llk_l = cal_log_obs(sl, sr, this_eta);
+    	        llk_l = log_obs_i(sl, sr, this_eta, i);
     	        dob_dp_both[i] = (llk_h - llk_l) / (2 * this_h);
     	    }
     	    else if( sl == 1.0 ){
     	        this_h = min(sr / 2.0, h);
     	        sr -= this_h;
-    	        llk_h = cal_log_obs(sl, sr, this_eta);
+    	        llk_h = log_obs_i(sl, sr, this_eta, i);
     	        sr += 2.0 * this_h;
-    	        llk_l = cal_log_obs(sl, sr, this_eta);
+    	        llk_l = log_obs_i(sl, sr, this_eta, i);
     	        dob_dp_both[i] = (llk_h - llk_l)/(2*this_h);
     	        dob_dp_rightOnly[i] = dob_dp_both[i];
     	    }
     	    else{
     	        this_h = min(sr /2.0, h);
     	        sr -= this_h;
-    	        llk_h = cal_log_obs(sl, sr, this_eta);
+    	        llk_h = log_obs_i(sl, sr, this_eta, i);
     	        sr += 2.0 * this_h;
-    	        llk_l = cal_log_obs(sl, sr, this_eta);
+    	        llk_l = log_obs_i(sl, sr, this_eta, i);
     	        sr -= this_h;
     	        dob_dp_rightOnly[i] = (llk_h - llk_l)/(2*this_h);
     	        sr -= this_h;
     	        sl -= this_h;
-    	        llk_h = cal_log_obs(sl, sr, this_eta);
+    	        llk_h = log_obs_i(sl, sr, this_eta, i);
             
     	        sr += 2.0 * this_h;
     	        sl += 2.0 * this_h;
-    	        llk_l = cal_log_obs(sl, sr, this_eta);
+    	        llk_l = log_obs_i(sl, sr, this_eta, i);
     	        dob_dp_both[i] = (llk_h - llk_l)/(2*this_h);
     	        
     	    }

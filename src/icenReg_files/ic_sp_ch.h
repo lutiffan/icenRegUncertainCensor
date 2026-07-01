@@ -71,6 +71,8 @@ public:
     virtual double reg_d2_lnk(double ch, double xb, double log_p) = 0;
     
     void calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1);
+    void numericTotContOne(int i, double &d1, double &d2);
+    double cal_log_obs_mix(double s1, double s2, double eta, double pi);
     void rawDervs2ActDervs();
     
     Eigen::VectorXd     baseCH;     //Vector of baseline log cumulative hazards.
@@ -91,6 +93,8 @@ public:
 //    Eigen::VectorXd     reg_d2;     //second derivatives: ignoring off diagonals!
     
     vector<double> w;
+    vector<double> lcProb;
+    bool hasLcMix;
     
     double maxBaseChg;      //Max change in baseline parameters during icm step
     double h;
@@ -154,7 +158,8 @@ public:
     void vem_sweep2();
 };
 
-void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, icm_Abst* icm_obj);
+void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, 
+               SEXP R_RegPars, SEXP R_lcProb, icm_Abst* icm_obj);
 //function for setting up a actSet_Abst class
 
 void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p);
@@ -255,7 +260,7 @@ extern "C" {
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
  			  SEXP R_w, SEXP R_use_GD, SEXP R_maxiter,
  			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
- 			  SEXP R_initialRegVals);
+ 			  SEXP R_initialRegVals, SEXP R_lcProb);
     SEXP findMI(SEXP R_AllVals, SEXP isL, SEXP isR, SEXP lVals, SEXP rVals);
 }
 #endif /* defined(____ic_sp_cm__) */

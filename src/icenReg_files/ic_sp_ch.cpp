@@ -15,7 +15,13 @@ void icm_Abst::update_p_ob(int i){
     double chl = baseCH[ obs_inf[i].l ];
     double chr = baseCH[ obs_inf[i].r +1 ];
     double eta = etas[i];
-    obs_inf[i].pob = basHaz2CondS(chl, eta) - basHaz2CondS(chr, eta);
+    double likelihood_interval = basHaz2CondS(chl, eta) - basHaz2CondS(chr, eta);
+    double pi = lcProb[i];
+    obs_inf[i].pob = likelihood_interval;
+    if(pi > 0.0 && pi <= 1.0){
+        double likelihood_left = 1.0 - basHaz2CondS(chr, eta);
+        obs_inf[i].pob = pi * likelihood_left + (1.0 - pi) * likelihood_interval;
+    }
 }
 
 double icm_Abst::sum_llk(){
@@ -85,15 +91,18 @@ void icm_Abst::icm_addPar(vector<double> &delta){
 
 /*      INITIALIZATION TOOLS    */
 void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, 
-				SEXP R_RegPars, icm_Abst* icm_obj){
+				SEXP R_RegPars, SEXP R_lcProb, icm_Abst* icm_obj){
     icm_obj->h = 0.0001;
     icm_obj->almost_inf = 1.0/icm_obj->h;
     int n = LENGTH(Rlind);
     if(n != LENGTH(Rrind)){Rprintf("length of Rlind and Rrind not equal\n"); return;}
+    if(n != LENGTH(R_lcProb)){Rprintf("length of lcProb not equal to n\n"); return;}
     icm_obj->base_p_obs.resize(n);
     icm_obj->etas.resize(n);
     icm_obj->expEtas.resize(n);
     icm_obj->w.resize(n);
+    icm_obj->lcProb.resize(n);
+    icm_obj->hasLcMix = false;
     	
 	icm_obj->intercept = 0.0;
 	
@@ -102,6 +111,10 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w,
         icm_obj->expEtas[i]    = 1;
         icm_obj->base_p_obs[i] = 0;
         icm_obj->w[i]          = REAL(R_w)[i];
+        icm_obj->lcProb[i]     = REAL(R_lcProb)[i];
+        if(icm_obj->lcProb[i] > 0.0 && icm_obj->lcProb[i] <= 1.0){
+            icm_obj->hasLcMix = true;
+        }
     }
     
     copyRmatrix_intoEigen(RCovars, icm_obj->covars);
@@ -319,6 +332,26 @@ void icm_Abst::icm_step(){
 
 }
 
+void icm_Abst::numericTotContOne(int i, double &d1, double &d2){
+    double this_h = h;
+    if(this_h <= 0) this_h = 0.0001;
+    double eta0 = etas[i];
+    etas[i] = eta0 + this_h;
+    expEtas[i] = exp(etas[i]);
+    update_p_ob(i);
+    double llk_h = log(obs_inf[i].pob);
+    etas[i] = eta0 - this_h;
+    expEtas[i] = exp(etas[i]);
+    update_p_ob(i);
+    double llk_l = log(obs_inf[i].pob);
+    etas[i] = eta0;
+    expEtas[i] = exp(eta0);
+    update_p_ob(i);
+    double llk_0 = log(obs_inf[i].pob);
+    d1 = (llk_h - llk_l) / (2.0 * this_h);
+    d2 = (llk_h + llk_l - 2.0 * llk_0) / (this_h * this_h);
+}
+
 void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
     int k = reg_par.size();
     int n = etas.size();
@@ -332,7 +365,7 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
     Eigen::VectorXd totCont2(n);
     
     int lind, rind;
-    double l_ch, r_ch, eta, pob, log_p;
+    double l_ch, r_ch, eta, pob, log_p, pi;
     for(int i = 0; i < n; i++){
         l_cont[i]  = 0;
         r_cont[i]  = 0;
@@ -341,21 +374,29 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
 
         lind = obs_inf[i].l;
         rind = obs_inf[i].r;
+        update_p_ob(i);
         pob  = obs_inf[i].pob;
         log_p = log(pob);
         l_ch = baseCH[lind];
         r_ch = baseCH[rind + 1];
         eta  = etas[i];
-        if(l_ch > R_NegInf){
-            l_cont[i]  = reg_d1_lnk(l_ch, eta, log_p);
-            l_cont2[i] = reg_d2_lnk(l_ch, eta, log_p);
+        pi = lcProb[i];
+
+        if(hasLcMix && pi > 0.0 && pi < 1.0){
+            numericTotContOne(i, totCont[i], totCont2[i]);
         }
-        if(r_ch < R_PosInf){
-            r_cont[i]  = -reg_d1_lnk(r_ch, eta, log_p);
-            r_cont2[i] = -reg_d2_lnk(r_ch, eta, log_p);
+        else{
+            if(l_ch > R_NegInf && !(hasLcMix && pi >= 1.0 - 1e-15)){
+                l_cont[i]  = reg_d1_lnk(l_ch, eta, log_p);
+                l_cont2[i] = reg_d2_lnk(l_ch, eta, log_p);
+            }
+            if(r_ch < R_PosInf){
+                r_cont[i]  = -reg_d1_lnk(r_ch, eta, log_p);
+                r_cont2[i] = -reg_d2_lnk(r_ch, eta, log_p);
+            }
+            totCont[i] = l_cont[i] + r_cont[i];
+            totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
         }
-        totCont[i] = l_cont[i] + r_cont[i];
-        totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
     }
     
     hess.resize(k, k);
@@ -442,7 +483,7 @@ void icm_Abst::covar_nr_step(){
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
  			  SEXP R_w, SEXP R_use_GD, SEXP R_maxiter,
  			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
- 			  SEXP R_initialRegVals){
+ 			  SEXP R_initialRegVals, SEXP R_lcProb){
     icm_Abst* optObj;
     bool useGD = LOGICAL(R_use_GD)[0] == TRUE;
 	
@@ -454,7 +495,7 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     }
     else { Rprintf("fit type not supported\n");return(R_NilValue);}
     optObj->updateCovars = LOGICAL(R_updateCovars)[0] == TRUE;
-    setup_icm(Rlind, Rrind, Rcovars, R_w, R_initialRegVals, optObj);
+    setup_icm(Rlind, Rrind, Rcovars, R_w, R_initialRegVals, R_lcProb, optObj);
     
     optObj->useFullHess = LOGICAL(R_useFullHess)[0] == TRUE;
     

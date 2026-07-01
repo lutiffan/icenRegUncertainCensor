@@ -17,6 +17,54 @@ findMaximalIntersections <- function(lower, upper){
 }
 
 
+checkLcProb <- function(lcProb, yMat, leftCen = 0, rightCen = Inf, uncenTol = 1e-6){
+  n <- nrow(yMat)
+  isRightCen <- yMat[,2] >= rightCen | is.na(yMat[,2])
+  isLeftCen <- yMat[,1] <= leftCen
+  isExact <- abs(yMat[,2] - yMat[,1]) < uncenTol
+  isInterval <- !(isRightCen | isLeftCen | isExact)
+
+  if(is.null(lcProb)){
+    ans <- rep(0, n)
+    ans[isLeftCen] <- 1
+    return(ans)
+  }
+  if(length(lcProb) != n){
+    stop('lcProb must have one value per observation')
+  }
+
+  resolved <- rep(NA_real_, n)
+  for(i in seq_len(n)){
+    pi_i <- lcProb[i]
+    if(isRightCen[i]){
+      if(!is.na(pi_i) && pi_i != 0){
+        stop('right-censored observations require lcProb NA or 0')
+      }
+      resolved[i] <- 0
+    } else if(isLeftCen[i]){
+      if(!is.na(pi_i) && pi_i != 1){
+        stop('left-censored observations require lcProb NA or 1')
+      }
+      resolved[i] <- 1
+    } else if(isExact[i]){
+      if(is.na(pi_i)){
+        stop('exact observations require a numeric lcProb value')
+      }
+      if(pi_i < 0 || pi_i > 1){
+        stop('lcProb must be in [0, 1] for exact observations')
+      }
+      resolved[i] <- pi_i
+    } else if(isInterval[i]){
+      if(!is.na(pi_i) && pi_i != 0){
+        stop('interval-censored observations require lcProb NA or 0')
+      }
+      resolved[i] <- 0
+    }
+  }
+  resolved
+}
+
+
 bs_sampleData <- function(rawDataEnv, weights){
 	n <- length(rawDataEnv[['y']][,1])
 	sampEnv <- new.env()
@@ -24,9 +72,12 @@ bs_sampleData <- function(rawDataEnv, weights){
 	tabledInds <- table(sampInds)
 	unqInds <- as.numeric(names(tabledInds))
 	weights <- as.numeric(tabledInds)
-	sampEnv[['x']] <- rawDataEnv[['x']][unqInds,]
-	sampEnv[['y']] <- rawDataEnv[['y']][unqInds,]
+	sampEnv[['x']] <- rawDataEnv[['x']][unqInds,, drop = FALSE]
+	sampEnv[['y']] <- rawDataEnv[['y']][unqInds,, drop = FALSE]
 	sampEnv[['w']] <- weights
+	if(!is.null(rawDataEnv[['lcProb']])){
+	  sampEnv[['lcProb']] <- rawDataEnv[['lcProb']][unqInds]
+	}
 	return(sampEnv)
 }
 
@@ -34,7 +85,11 @@ getBS_coef <- function(sampDataEnv, callText = 'ic_ph', other_info){
 	xMat <- cbind(sampDataEnv$x,1)
 	invertResult <- try(diag(solve(t(xMat) %*% xMat )), silent = TRUE)
 	if(is(invertResult, 'try-error')) {return( rep(NA, ncol(xMat) -1) ) }
-	output <- fit_ICPH(sampDataEnv$y, sampDataEnv$x, callText, sampDataEnv$w, other_info)$coefficients
+	bs_info <- other_info
+	if(!is.null(sampDataEnv[['lcProb']])){
+	  bs_info[['lcProb']] <- sampDataEnv[['lcProb']]
+	}
+	output <- fit_ICPH(sampDataEnv$y, sampDataEnv$x, callText, sampDataEnv$w, bs_info)$coefficients
 	return(output)
 }
 

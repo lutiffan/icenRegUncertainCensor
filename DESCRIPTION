@@ -1,6 +1,6 @@
-Package: icenReg
+Package: icenRegDev
 Type: Package
-Title: Regression Models for Interval Censored Data
+Title: Regression Models for Interval Censored Data (Development Fork)
 Version: 2.0.16
 Date: 2024-01-13
 Author: Clifford Anderson-Bergman

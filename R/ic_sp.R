@@ -4,6 +4,7 @@
 #' @param data dataset
 #' @param model What type of model to fit. Current choices are "\code{ph}" (Cox PH) or "\code{po}" (proportional odds)
 #' @param weights Vector of case weights. Not standardized; see details
+#' @param lcProb Optional vector of mixture weights for exact observations; see details
 #' @param bs_samples Number of bootstrap samples used for estimation of standard errors 
 #' @param useMCores Should multiple cores be used for bootstrap sample? Does not register cluster (see example)
 #' @param B Should intervals be open or closed? See details.
@@ -31,6 +32,14 @@
 #' In regards to weights, they are not standardized. 
 #' This means that if weight[i] = 2, this is the equivalent to having two 
 #' observations with the same values as subject i. 
+#'
+#' The optional argument \code{lcProb} mixes exact and left-censored likelihood
+#' contributions for each subject. It is distinct from \code{weights}: \code{weights}
+#' control case weights and bootstrap replication; \code{lcProb} enters only inside
+#' the per-subject probability \code{pob}. Use \code{NA} on right-censored
+#' observations (resolved to 0), \code{NA} on left-censored (resolved to 1),
+#' and numeric values in \([0,1]\) on exact observations. When \code{lcProb = NULL},
+#' behavior matches the standard model (0 except left-censored at 1).
 #'
 #' The algorithm used is inspired by the extended ICM algorithm from Wei Pan 1999.
 #' However, it uses a conditional Newton Raphson step (for the regression parameters) 
@@ -87,7 +96,7 @@
 #' Anderson-Bergman, C. (preprint) Revisiting the iterative convex minorant algorithm for interval censored survival regression models
 #' @export
 ic_sp <- function(formula, data, model = 'ph', 
-                  weights = NULL, bs_samples = 0, useMCores = F, 
+                  weights = NULL, lcProb = NULL, bs_samples = 0, useMCores = F, 
                   B = c(0,1), 
                   controls = makeCtrls_icsp() ){
   recenterCovars = TRUE
@@ -119,6 +128,7 @@ ic_sp <- function(formula, data, model = 'ph',
   else stop('invalid choice of model. Current optios are "ph" (cox ph) or "po" (proportional odds)')
   
   weights <- checkWeights(weights, yMat)	
+  lcProbResolved <- checkLcProb(lcProb, yMat)
   if(length(x) == 0) recenterCovars = FALSE
   
   if(!is.null(controls$regStart)) regStart <- controls$regStart
@@ -132,7 +142,8 @@ ic_sp <- function(formula, data, model = 'ph',
                      useFullHess = useFullHess, 
                      updateCovars = controls$updateReg,
                      recenterCovars = recenterCovars, 
-                     regStart = regStart)  
+                     regStart = regStart,
+                     lcProb = lcProbResolved)  
 
   # Recentering covariates
   covarOffset <- icColMeans(x)
@@ -143,6 +154,7 @@ ic_sp <- function(formula, data, model = 'ph',
   dataEnv[['x']] <- as.matrix(x, nrow = nrow(yMat))
   if(ncol(dataEnv$x) == 1) colnames(dataEnv[['x']]) <- xNames
   dataEnv[['y']] <- yMat
+  dataEnv[['lcProb']] <- lcProbResolved
   seeds = as.integer( runif(bs_samples, 0, 2^31) )
   bsMat <- numeric()
   if(useMCores) `%mydo%` <- `%dopar%`
@@ -237,6 +249,7 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   useFullHess <- other_info$useFullHess
   updateCovars <- other_info$updateCovars
   regStart <- other_info$regStart
+  lcProb <- other_info$lcProb
   # recenterCovars = FALSE
   # if(getNumCovars(covars) == 0)	recenterCovars <- FALSE
   mi_info <- findMaximalIntersections(obsMat[,1], obsMat[,2])
@@ -256,7 +269,7 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
                  covars, fitType, as.numeric(weights), useGA, 
                  as.integer(maxIter), as.integer(baselineUpdates),
                  as.logical(useFullHess), as.logical(updateCovars),
-                 as.double(regStart))  
+                 as.double(regStart), as.double(lcProb))
   names(c_ans) <- c('p_hat', 'coefficients', 'llk', 'iterations', 'score')
   myFit <- new(callText)
   myFit$p_hat <- c_ans$p_hat
