@@ -187,14 +187,20 @@ public:
         return (-exp(logAns));
     }
     
-    double reg_d1_lnk(double ch, double xb, double log_p){
+    double reg_d1_lnk_w(double ch, double xb, double log_p, double log_mix){
         double term1 = -exp(ch + xb);
-        return(-exp(term1 + ch + xb - log_p));
+        return(-exp(term1 + ch + xb - log_p + log_mix));
+    }
+    double reg_d2_lnk_w(double ch, double xb, double log_p, double log_mix){
+        double term1 = -exp(ch + xb);
+        double term2 = exp(term1 - log_p + log_mix);
+        return(term1 * term2 + term1 * term1 * term2);
+    }
+    double reg_d1_lnk(double ch, double xb, double log_p){
+        return reg_d1_lnk_w(ch, xb, log_p, 0.0);
     }
     double reg_d2_lnk(double ch, double xb, double log_p){
-        double term1 = -exp(ch + xb);
-        double term2 = exp(term1 - log_p);
-        return(term1 * term2 + term1 * term1 *term2);
+        return reg_d2_lnk_w(ch, xb, log_p, 0.0);
     }
 	
 	void stablizeBCH(){

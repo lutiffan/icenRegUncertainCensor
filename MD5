@@ -61,8 +61,8 @@ c8abba2dc1e6d4d80a41a25dfb06f6b6 *src/icenReg_files/ic_par.cpp
 c59be06c5845b1bc95ca97336711092f *src/icenReg_files/ic_par.h
 9949b49a6b7eb775640780cd46749bad *src/icenReg_files/ic_par_aft.cpp
 059aff5b4a0e65bdd1a652722c39d913 *src/icenReg_files/ic_par_aft.h
-e943d5ae4813e5862a1eb784d58d264f *src/icenReg_files/ic_sp_ch.cpp
-774996e170ea59cb5a704a377c307da5 *src/icenReg_files/ic_sp_ch.h
+913df667f1eec564fd696de23e66e87f *src/icenReg_files/ic_sp_ch.cpp
+6c68fefd42eee3014ece018037b86059 *src/icenReg_files/ic_sp_ch.h
 dfa57889f58e75742a094f35162213b4 *src/icenReg_files/ic_sp_gradDescent.cpp
 0287d3e966fb42312444172a62ab5dbf *src/icenReg_files/myPAVAalgorithm.cpp
 d6f499c9ae7a597284af80b7389f776e *src/icenReg_files/regressionTransforms.cpp

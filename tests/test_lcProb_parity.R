@@ -64,3 +64,45 @@ test_that("checkLcProb validation and mixture behavior", {
   fitOne <- icenRegDev::ic_sp(Surv(l, u, type = "interval2") ~ x1, data = dat, lcProb = lcOne, bs_samples = 0)
   expect_false(isTRUE(all.equal(fitOne$llk, fit0$llk, tolerance = 1e-8)))
 })
+
+test_that("PH interior-pi uses analytic regression derivatives", {
+  skip_if_not(requireNamespace("pkgload", quietly = TRUE))
+  skip_if_not(requireNamespace("survival", quietly = TRUE))
+  library(survival)
+  pkgload::load_all(".", quiet = TRUE)
+
+  set.seed(31415)
+  sim_data <- icenRegDev::simIC_weib(n = 80, inspections = 4, inspectLength = 1, b1 = 0.3)
+  form <- Surv(l, u, type = "interval2") ~ x1 + x2
+  lc <- rep(0, nrow(sim_data))
+  exact <- sim_data$l == sim_data$u & is.finite(sim_data$u)
+  lc[exact] <- 0.5
+
+  fit <- icenRegDev::ic_sp(form, data = sim_data, lcProb = lc, model = "ph", bs_samples = 0)
+
+  expect_true(is.finite(fit$llk))
+  expect_true(all(is.finite(fit$coefficients)))
+  expect_gt(fit$iterations, 0L)
+  expect_equal(as.numeric(fit$coefficients), c(0.6137077738, -0.7102174532), tolerance = 1e-5)
+  expect_equal(fit$llk, -84.12603, tolerance = 1e-5)
+})
+
+test_that("PO interior-pi still fits with numeric derivatives", {
+  skip_if_not(requireNamespace("pkgload", quietly = TRUE))
+  skip_if_not(requireNamespace("survival", quietly = TRUE))
+  library(survival)
+  pkgload::load_all(".", quiet = TRUE)
+
+  set.seed(31415)
+  sim_data <- icenRegDev::simIC_weib(n = 80, inspections = 4, inspectLength = 1, b1 = 0.3)
+  form <- Surv(l, u, type = "interval2") ~ x1 + x2
+  lc <- rep(0, nrow(sim_data))
+  exact <- sim_data$l == sim_data$u & is.finite(sim_data$u)
+  lc[exact] <- 0.5
+
+  fit <- icenRegDev::ic_sp(form, data = sim_data, lcProb = lc, model = "po", bs_samples = 0)
+
+  expect_true(is.finite(fit$llk))
+  expect_true(all(is.finite(fit$coefficients)))
+  expect_gt(fit$iterations, 0L)
+})

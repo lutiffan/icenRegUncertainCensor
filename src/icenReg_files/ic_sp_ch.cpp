@@ -383,7 +383,22 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
         pi = lcProb[i];
 
         if(hasLcMix && pi > 0.0 && pi < 1.0){
-            numericTotContOne(i, totCont[i], totCont2[i]);
+            icm_ph* ph = dynamic_cast<icm_ph*>(this);
+            if(ph != nullptr){
+                double log_1m_pi = log(1.0 - pi);
+                if(l_ch > R_NegInf){
+                    l_cont[i]  = ph->reg_d1_lnk_w(l_ch, eta, log_p, log_1m_pi);
+                    l_cont2[i] = ph->reg_d2_lnk_w(l_ch, eta, log_p, log_1m_pi);
+                }
+                if(r_ch < R_PosInf){
+                    r_cont[i]  = -ph->reg_d1_lnk_w(r_ch, eta, log_p, 0.0);
+                    r_cont2[i] = -ph->reg_d2_lnk_w(r_ch, eta, log_p, 0.0);
+                }
+                totCont[i]  = l_cont[i] + r_cont[i];
+                totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
+            } else {
+                numericTotContOne(i, totCont[i], totCont2[i]);
+            }
         }
         else{
             if(l_ch > R_NegInf && !(hasLcMix && pi >= 1.0 - 1e-15)){
